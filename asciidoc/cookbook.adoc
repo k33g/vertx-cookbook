@@ -1,0 +1,7 @@
+= Vert.x Cookbook
+Julien Viet <julien@julienviet.com>
+:toc: left
+
+This is a cookbook that contains various Vert.x how-to
+
+include::sample.adoc[]

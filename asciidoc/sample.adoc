@@ -1,0 +1,19 @@
+== Sample recipe
+
+A recipe explains how to implement a particular use case.
+
+It is written in Asciidoctor format.
+
+And it can include Java source code.
+
+[source,java]
+----
+Vertx vertx = Vertx.vertx();
+
+HttpServer server = vertx.createHttpServer();
+server.requestHandler(req -> {
+  req.response().end("Hello world");
+});
+
+server.listen(8080);
+----
