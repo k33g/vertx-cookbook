@@ -1,6 +1,6 @@
 # Vert.x Cookbook
 
-This is a collaborative cookbook effort that aims to garther a set of how-to about Vert.x and its ecosystem.
+This is a collaborative cookbook effort that aims to gather a set of how-to about Vert.x and its ecosystem.
 
 - [Asciidoctor](asciidoc/cookbook.adoc)
 - [HTML](https://vertx.ci.cloudbees.com/job/vert.x3-cookbook/ws/target/html/cookbook.html)
@@ -25,4 +25,4 @@ I welcome anyone wanting to contribute an how-to to this cookbook. There is no p
  is free to contribute content, given that it provides solutions about Vert.x that can be shared
  freely with the community.
 
-Contributions is made via pull requests.
+Contributions are made via pull requests.
