@@ -8,7 +8,7 @@ This is a collaborative cookbook effort that aims to garther a set of how-to abo
 
 ```
 > mvn package
-> open target/vertx-cookbook/cookbook.html
+> open target/html/cookbook.html
 ```
 
 ## Project structure
