@@ -3,12 +3,12 @@
 This is a collaborative cookbook effort that aims to garther a set of how-to about Vert.x and its ecosystem.
 
 - [Asciidoctor](asciidoc/cookbook.adoc)
+- [HTML](https://vertx.ci.cloudbees.com/job/vert.x3-cookbook/ws/target/html/cookbook.html)
 
 ## Building the Cookbook
 
 ```
 > mvn package
-> open target/html/cookbook.html
 ```
 
 ## Project structure
