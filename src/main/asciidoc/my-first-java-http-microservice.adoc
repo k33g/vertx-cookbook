@@ -556,8 +556,8 @@ discovery
         : "😢 no record found" ;
       System.out.println(message);
       
-      successfulRecords.forEach(item -> {
-        System.out.println(item.toJson());                
+      successfulRecords.forEach(record -> {
+        System.out.println(record.toJson());                
       });
     },
     failure -> {
@@ -587,8 +587,8 @@ server
               : "😢 no record found" ;
             System.out.println(message);
             
-            successfulRecords.forEach(item -> {
-              System.out.println(item.toJson());                
+            successfulRecords.forEach(record -> {
+              System.out.println(record.toJson());                
             });
           },
           failure -> {
@@ -655,5 +655,248 @@ You can check the records with the redis client with this command: `hgetall vert
 {"location":{"endpoint":"http://localhost:8081/api","host":"localhost","port":8081,"root":"/api","ssl":false},"metadata":{"kind":"http","message":"Hello 🌍","uri":"/hello"},"name":"HELLO-SERVICE","registration":"51d24337-c0f0-4f36-8b0a-76ff0090cf93","status":"UP","type":"http-endpoint"}
 ```
 
+==== Disvover services and call them
+
+For each service found, we'll call the service. For each record, we'll create a `ServiceReference` from the current record. Then we'll be able to instantiate a `WebClient` from the reference. And then it will be possible to call the service from the client (`client.get(uri).send()`).
+
+So, update the discovery part of the source code like that:
+
+[source, java]
+----
+discovery
+  .rxGetRecords((JsonObject) null)
+  .subscribe(
+    successfulRecords -> {
+      String message = successfulRecords.size() > 0 
+        ? "😋 " + successfulRecords.size() + " record(s) found."
+        : "😢 no record found" ;
+      System.out.println(message);
+
+      successfulRecords.forEach(record -> {
+
+        ServiceReference reference = discovery.getReference(record);
+        WebClient client = reference.getAs(WebClient.class);
+
+        String uri = record.getLocation().getString("root")+"/"+record.getMetadata().getString("uri");
+        // eg: uri = "/root/hello"
+        client.get(uri).send(
+          resp -> {
+            System.out.println(resp.result().body());
+          }
+        );
+
+      });
+    },
+    failure -> {
+      System.out.println("😡 Unable to discover the services: " + failure.getMessage());
+    }
+  );
+----
+
+Now, open a terminal and run this:
+
+```
+SERVICE_NAME="HELLO-SERVICE" SERVICE_PORT=8081 PORT=8081 java -jar target/myservice-1.0-SNAPSHOT-fat.jar
+```
+
+And you'll get this:
+
+```
+🌍 Listening on 8081
+😢 no record found
+😃 Microservice is published! e89fbc50-c5bb-4fe8-81ca-10de16d263f8
+```
+
+Then, open an other terminal:
+
+```
+SERVICE_NAME="HI-SERVICE" SERVICE_PORT=8082 PORT=8082 java -jar target/myservice-1.0-SNAPSHOT-fat.jar
+```
+
+And you'll get this:
+
+```
+🌍 Listening on 8082
+😋 1 record(s) found.
+😃 Microservice is published! 1a8729b2-ad5b-4ae4-857d-6d9a990383da
+{"message":"👋 Hello 🌍"}
+```
+
+Again, open an other terminal (the last one):
+
+```
+SERVICE_NAME="YO-SERVICE" SERVICE_PORT=8083 PORT=8083 java -jar target/myservice-1.0-SNAPSHOT-fat.jar 
+```
+
+And you'll get this:
+
+```
+🌍 Listening on 8083
+😋 2 record(s) found.
+😃 Microservice is published! c1b31fba-306d-45b8-802b-577b391cfbb3
+{"message":"👋 Hello 🌍"}
+{"message":"👋 Hello 🌍"}
+```
+
 That's all for the moment. Stay tuned for the next episode 👋.
 
+=== The complete source code
+
+[source, java]
+----
+package io.vertx.starter;
+
+import io.vertx.rxjava.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.rxjava.core.http.HttpServer;
+import io.vertx.core.json.JsonObject;
+import io.vertx.rxjava.ext.web.Router;
+import io.vertx.rxjava.ext.web.handler.BodyHandler;
+import io.vertx.rxjava.servicediscovery.types.HttpEndpoint;
+import io.vertx.rxjava.servicediscovery.ServiceDiscovery;
+import io.vertx.servicediscovery.ServiceDiscoveryOptions;
+import io.vertx.servicediscovery.Record;
+
+import io.vertx.rxjava.servicediscovery.ServiceReference;
+import io.vertx.rxjava.ext.web.client.WebClient;
+
+
+import java.util.Optional;
+
+public class MyService extends AbstractVerticle {
+
+  private ServiceDiscovery discovery;
+  private Record record;
+
+  public void stop(Future<Void> stopFuture) {
+    System.out.println("Unregistration process is started ("+record.getRegistration()+")...");
+
+    discovery
+      .rxUnpublish(record.getRegistration())
+      .subscribe(
+        successfulResult -> {
+          System.out.println("👋 bye bye " + record.getRegistration());
+          stopFuture.complete();
+        },
+        failure -> {
+          failure.getCause().printStackTrace();
+          System.out.println("😡 Unable to unpublish the microservice: " + failure.getMessage());
+        }
+      );
+  }
+  public void start() {
+
+    /**
+     * Define Discovery service
+     */
+    ServiceDiscoveryOptions serviceDiscoveryOptions = new ServiceDiscoveryOptions();
+    // Redis settings
+    Integer redisPort = Integer.parseInt(Optional.ofNullable(System.getenv("REDIS_PORT")).orElse("6379"));
+    String redisHost = Optional.ofNullable(System.getenv("REDIS_HOST")).orElse("127.0.0.1");
+    String redisAuth = Optional.ofNullable(System.getenv("REDIS_PASSWORD")).orElse(null);
+    // the redis hash
+    String redisRecordsKey = Optional.ofNullable(System.getenv("REDIS_RECORDS_KEY")).orElse("vert.x.ms");    
+    
+    discovery = ServiceDiscovery.create(
+      vertx,
+      serviceDiscoveryOptions.setBackendConfiguration(
+        new JsonObject()
+          .put("host", redisHost)
+          .put("port", redisPort)
+          .put("auth", redisAuth)
+          .put("key", redisRecordsKey)
+      ));    
+
+    String serviceName = Optional.ofNullable(System.getenv("SERVICE_NAME")).orElse("my-service");
+    String serviceHost = Optional.ofNullable(System.getenv("SERVICE_HOST")).orElse("localhost"); 
+    Integer servicePort = Integer.parseInt(Optional.ofNullable(System.getenv("SERVICE_PORT")).orElse("8080"));
+    String serviceRoot = Optional.ofNullable(System.getenv("SERVICE_ROOT")).orElse("/api");
+
+    // create the microservice record
+    record = HttpEndpoint.createRecord(
+      serviceName,
+      serviceHost,
+      servicePort,
+      serviceRoot
+    );
+    // add some metadata
+    record.setMetadata(new JsonObject()
+      .put("kind", "http")
+      .put("message", "Hello 🌍")
+      .put("uri", "/hello")
+    );
+
+    /**
+     * Define routes and router
+     */
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/hello").handler(context -> {
+      context.response()
+        .putHeader("content-type", "application/json;charset=UTF-8")
+        .end(
+          new JsonObject().put("message", "👋 Hello 🌍").toString()
+        );
+    });
+
+    /**
+     * Start the server the microservice
+     */
+    Integer httpPort = Integer.parseInt(Optional.ofNullable(System.getenv("PORT")).orElse("8080"));
+    HttpServer server = vertx.createHttpServer();
+
+    server
+      .requestHandler(router::accept)
+      .rxListen(httpPort)
+      .subscribe(
+        httpserver -> { // success
+          System.out.println("🌍 Listening on " + httpserver.actualPort());
+
+          discovery
+            .rxGetRecords((JsonObject) null)
+            .subscribe(
+              successfulRecords -> {
+                String message = successfulRecords.size() > 0 
+                  ? "😋 " + successfulRecords.size() + " record(s) found."
+                  : "😢 no record found" ;
+                System.out.println(message);
+
+                successfulRecords.forEach(record -> {
+
+                  ServiceReference reference = discovery.getReference(record);
+                  WebClient client = reference.getAs(WebClient.class);
+
+                  String uri = record.getLocation().getString("root")+"/"+record.getMetadata().getString("uri");
+                  // eg: uri = "/root/hello"
+                  client.get(uri).send(
+                    resp -> {
+                      System.out.println(resp.result().body());
+                    }
+                  );
+
+                });
+              },
+              failure -> {
+                System.out.println("😡 Unable to discover the services: " + failure.getMessage());
+              }
+            );
+
+          discovery
+            .rxPublish(record)
+            .subscribe(
+              succesfulRecord -> {
+                System.out.println("😃 Microservice is published! " + succesfulRecord.getRegistration());
+              },
+              failure -> {
+                System.out.println("😡 Not able to publish the microservice: " + failure.getMessage());
+              }
+            );
+        },
+        failure -> {
+          System.out.println("😡 Houston, we have a problem: " + failure.getMessage());
+        }
+      );
+  }
+}
+----
