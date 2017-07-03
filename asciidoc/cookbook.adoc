@@ -5,3 +5,5 @@ Julien Viet <julien@julienviet.com>
 This is a cookbook that contains various Vert.x how-to
 
 include::sample.adoc[]
+
+include::my-first-java-http-microservice.adoc[]
